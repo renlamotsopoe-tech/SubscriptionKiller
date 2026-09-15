@@ -95,18 +95,24 @@ export default function HomeScreen() {
         .map((email) => detectSubscriptionCandidate(email))
         .filter((candidate) => candidate.isSubscriptionCandidate);
 
+      const candidateSummaries = detectedCandidates.map((candidate) => {
+        const amount =
+          candidate.amount !== null && candidate.currency !== null
+            ? formatCandidateAmount(candidate.amount, candidate.currency)
+            : "amount unknown";
+        const frequency = candidate.billingFrequency ?? "frequency unknown";
+
+        return `${candidate.merchant} — ${amount} — ${frequency}`;
+      });
+
       Alert.alert(
         "Subscription Detection Complete",
         [
           `Emails retrieved: ${emailDetails.length}`,
           `Subscription candidates: ${detectedCandidates.length}`,
-          `Merchants: ${
-            detectedCandidates.length > 0
-              ? detectedCandidates
-                  .map((candidate) => candidate.merchant)
-                  .join(", ")
-              : "None detected"
-          }`,
+          candidateSummaries.length > 0
+            ? candidateSummaries.join("\n")
+            : "None detected",
         ].join("\n"),
       );
     } catch (error) {
@@ -272,6 +278,14 @@ export default function HomeScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function formatCandidateAmount(
+  amount: number,
+  currency: "INR" | "USD" | "EUR" | "GBP",
+): string {
+  const symbol = { INR: "₹", USD: "$", EUR: "€", GBP: "£" }[currency];
+  return `${symbol}${amount}`;
 }
 
 function SubscriptionRow({
