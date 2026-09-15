@@ -1,3 +1,4 @@
+import { detectSubscriptionCandidate } from "@/utils/subscription-detection";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
   Alert,
@@ -90,11 +91,23 @@ export default function HomeScreen() {
         });
       }
 
-      console.log("Retrieved email details:", emailDetails);
+      const detectedCandidates = emailDetails
+        .map((email) => detectSubscriptionCandidate(email))
+        .filter((candidate) => candidate.isSubscriptionCandidate);
 
       Alert.alert(
-        "Emails Retrieved",
-        `We successfully retrieved ${emailDetails.length} emails from Gmail.`,
+        "Subscription Detection Complete",
+        [
+          `Emails retrieved: ${emailDetails.length}`,
+          `Subscription candidates: ${detectedCandidates.length}`,
+          `Merchants: ${
+            detectedCandidates.length > 0
+              ? detectedCandidates
+                  .map((candidate) => candidate.merchant)
+                  .join(", ")
+              : "None detected"
+          }`,
+        ].join("\n"),
       );
     } catch (error) {
       console.error("Gmail Scan Error:", error);
