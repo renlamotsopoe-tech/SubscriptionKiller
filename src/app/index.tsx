@@ -1,3 +1,4 @@
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
   Alert,
   Pressable,
@@ -8,12 +9,101 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const GOOGLE_WEB_CLIENT_ID =
+  "70683543777-mso9f2hl8j75joc0noqbjplm8k43kipm.apps.googleusercontent.com";
+
+GoogleSignin.configure({
+  webClientId: GOOGLE_WEB_CLIENT_ID,
+});
+
 export default function HomeScreen() {
-  const handleScan = () => {
-    Alert.alert(
-      "Subscription Scan",
-      "Gmail scanning will be connected next. For now, this is the app preview.",
-    );
+  const handleScan = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+
+      const signInResponse = await GoogleSignin.signIn();
+
+      if (signInResponse.type !== "success") {
+        return;
+      }
+
+      await GoogleSignin.addScopes({
+        scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+      });
+
+      const tokens = await GoogleSignin.getTokens();
+
+      const gmailResponse = await fetch(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages?" +
+          new URLSearchParams({
+            q: "{subscription receipt payment}",
+            maxResults: "20",
+          }).toString(),
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${tokens.accessToken}`,
+          },
+        },
+      );
+
+      if (!gmailResponse.ok) {
+        throw new Error(`Gmail API error: ${gmailResponse.status}`);
+      }
+
+      const gmailData = await gmailResponse.json();
+
+      const messages = gmailData.messages ?? [];
+
+      const emailDetails = [];
+
+      for (const message of messages) {
+        const messageResponse = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=full`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${tokens.accessToken}`,
+            },
+          },
+        );
+
+        if (!messageResponse.ok) {
+          continue;
+        }
+
+        const messageData = await messageResponse.json();
+
+        const headers = messageData.payload?.headers ?? [];
+
+        const subject =
+          headers.find((header: any) => header.name === "Subject")?.value ?? "";
+
+        const sender =
+          headers.find((header: any) => header.name === "From")?.value ?? "";
+
+        emailDetails.push({
+          id: message.id,
+          subject,
+          sender,
+          snippet: messageData.snippet ?? "",
+        });
+      }
+
+      console.log("Retrieved email details:", emailDetails);
+
+      Alert.alert(
+        "Emails Retrieved",
+        `We successfully retrieved ${emailDetails.length} emails from Gmail.`,
+      );
+    } catch (error) {
+      console.error("Gmail Scan Error:", error);
+
+      Alert.alert(
+        "Gmail Scan Failed",
+        "We couldn't read your Gmail messages. Please try again.",
+      );
+    }
   };
 
   return (
