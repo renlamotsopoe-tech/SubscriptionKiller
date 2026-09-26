@@ -1,5 +1,10 @@
 import { detectSubscriptionCandidate } from "@/utils/subscription-detection";
+import {
+  createSubscriptionRecords,
+  type SubscriptionRecord,
+} from "@/utils/subscription-records";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import { useState } from "react";
 import {
   Alert,
   Pressable,
@@ -18,6 +23,12 @@ GoogleSignin.configure({
 });
 
 export default function HomeScreen() {
+  const [subscriptionRecords, setSubscriptionRecords] = useState<
+    SubscriptionRecord[]
+  >([]);
+  const dashboardTotals = getDashboardTotals(subscriptionRecords);
+  const decisionCounts = getDecisionCounts(subscriptionRecords);
+
   const handleScan = async () => {
     try {
       await GoogleSignin.hasPlayServices();
@@ -94,8 +105,11 @@ export default function HomeScreen() {
       const detectedCandidates = emailDetails
         .map((email) => detectSubscriptionCandidate(email))
         .filter((candidate) => candidate.isSubscriptionCandidate);
+      const records = createSubscriptionRecords(detectedCandidates);
 
-      const candidateSummaries = detectedCandidates.map((candidate) => {
+      setSubscriptionRecords(records);
+
+      const recordSummaries = records.map((candidate) => {
         const amount =
           candidate.amount !== null && candidate.currency !== null
             ? formatCandidateAmount(candidate.amount, candidate.currency)
@@ -109,9 +123,10 @@ export default function HomeScreen() {
         "Subscription Detection Complete",
         [
           `Emails retrieved: ${emailDetails.length}`,
-          `Subscription candidates: ${detectedCandidates.length}`,
-          candidateSummaries.length > 0
-            ? candidateSummaries.join("\n")
+          `Candidates: ${detectedCandidates.length}`,
+          `Subscriptions: ${records.length}`,
+          recordSummaries.length > 0
+            ? recordSummaries.join("\n")
             : "None detected",
         ].join("\n"),
       );
@@ -150,21 +165,43 @@ export default function HomeScreen() {
         <View style={styles.heroCard}>
           <Text style={styles.heroLabel}>YOUR SUBSCRIPTIONS</Text>
 
-          <Text style={styles.monthlyAmount}>₹2,847</Text>
+          <Text style={styles.monthlyAmount}>
+            {dashboardTotals.monthlyCost !== null && dashboardTotals.currency
+              ? formatCandidateAmount(
+                  dashboardTotals.monthlyCost,
+                  dashboardTotals.currency,
+                )
+              : subscriptionRecords.length > 0
+                ? "Amount unknown"
+                : "No scan yet"}
+          </Text>
 
-          <Text style={styles.perMonth}>per month</Text>
+          <Text style={styles.perMonth}>
+            {dashboardTotals.monthlyCost !== null
+              ? "per month"
+              : subscriptionRecords.length > 0
+                ? "some costs are unavailable"
+                : "scan Gmail to calculate"}
+          </Text>
 
           <View style={styles.divider} />
 
           <View style={styles.heroBottom}>
             <View>
               <Text style={styles.smallLabel}>YEARLY COST</Text>
-              <Text style={styles.yearlyAmount}>₹34,164</Text>
+              <Text style={styles.yearlyAmount}>
+                {dashboardTotals.yearlyCost !== null && dashboardTotals.currency
+                  ? formatCandidateAmount(
+                      dashboardTotals.yearlyCost,
+                      dashboardTotals.currency,
+                    )
+                  : "Amount unknown"}
+              </Text>
             </View>
 
             <View style={styles.subscriptionCount}>
-              <Text style={styles.countNumber}>7</Text>
-              <Text style={styles.countLabel}>active</Text>
+              <Text style={styles.countNumber}>{subscriptionRecords.length}</Text>
+              <Text style={styles.countLabel}>found</Text>
             </View>
           </View>
         </View>
@@ -197,19 +234,19 @@ export default function HomeScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statIcon}>✓</Text>
-            <Text style={styles.statNumber}>4</Text>
+            <Text style={styles.statNumber}>{decisionCounts.KEEP}</Text>
             <Text style={styles.statLabel}>Keep</Text>
           </View>
 
           <View style={styles.statCard}>
             <Text style={styles.statIcon}>?</Text>
-            <Text style={styles.statNumber}>2</Text>
+            <Text style={styles.statNumber}>{decisionCounts.REVIEW}</Text>
             <Text style={styles.statLabel}>Review</Text>
           </View>
 
           <View style={styles.statCard}>
             <Text style={styles.statIcon}>×</Text>
-            <Text style={styles.statNumber}>1</Text>
+            <Text style={styles.statNumber}>{decisionCounts.KILL}</Text>
             <Text style={styles.statLabel}>Kill</Text>
           </View>
         </View>
@@ -220,48 +257,38 @@ export default function HomeScreen() {
           <Text style={styles.seeAll}>See all</Text>
         </View>
 
-        <SubscriptionRow
-          name="Netflix"
-          category="Entertainment"
-          price="₹649"
-          frequency="/month"
-          status="KEEP"
-          icon="N"
-        />
+        {subscriptionRecords.length > 0 ? (
+          subscriptionRecords.map((record) => {
+            const name = record.productName ?? record.merchant;
 
-        <SubscriptionRow
-          name="Spotify"
-          category="Music"
-          price="₹119"
-          frequency="/month"
-          status="KEEP"
-          icon="S"
-        />
-
-        <SubscriptionRow
-          name="Adobe Creative Cloud"
-          category="Software"
-          price="₹1,675"
-          frequency="/month"
-          status="REVIEW"
-          icon="A"
-        />
-
-        <SubscriptionRow
-          name="Unused App"
-          category="Other"
-          price="₹404"
-          frequency="/month"
-          status="KILL"
-          icon="?"
-        />
+            return (
+              <SubscriptionRow
+                key={record.id}
+                name={name}
+                category={record.category}
+                price={formatRecordAmount(record)}
+                frequency={formatRecordFrequency(record.billingFrequency)}
+                status={record.decision}
+                icon={name.charAt(0).toUpperCase() || "?"}
+              />
+            );
+          })
+        ) : (
+          <Text style={styles.tipText}>
+            No subscription records yet. Scan Gmail to find them.
+          </Text>
+        )}
 
         {/* BOTTOM MESSAGE */}
         <View style={styles.tipCard}>
-          <Text style={styles.tipTitle}>You could save ₹404/month</Text>
+          <Text style={styles.tipTitle}>
+            {decisionCounts.KILL > 0
+              ? `${decisionCounts.KILL} subscription${decisionCounts.KILL === 1 ? "" : "s"} may be ending`
+              : "Review your detected subscriptions"}
+          </Text>
           <Text style={styles.tipText}>
-            One subscription looks unused. That's ₹4,848 you could keep this
-            year.
+            Recommendations use email evidence only and should be reviewed before
+            taking action.
           </Text>
 
           <Pressable
@@ -285,7 +312,65 @@ function formatCandidateAmount(
   currency: "INR" | "USD" | "EUR" | "GBP",
 ): string {
   const symbol = { INR: "₹", USD: "$", EUR: "€", GBP: "£" }[currency];
-  return `${symbol}${amount}`;
+  const formattedAmount = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+  return `${symbol}${formattedAmount}`;
+}
+
+function formatRecordAmount(record: SubscriptionRecord): string {
+  if (record.amount === null || record.currency === null) {
+    return "Amount unknown";
+  }
+
+  return formatCandidateAmount(record.amount, record.currency);
+}
+
+function formatRecordFrequency(
+  frequency: SubscriptionRecord["billingFrequency"],
+): string {
+  if (frequency === null) return "frequency unknown";
+
+  return {
+    weekly: "/week",
+    monthly: "/month",
+    quarterly: "/quarter",
+    yearly: "/year",
+  }[frequency];
+}
+
+function getDashboardTotals(records: SubscriptionRecord[]): {
+  monthlyCost: number | null;
+  yearlyCost: number | null;
+  currency: SubscriptionRecord["currency"];
+} {
+  if (
+    records.length === 0 ||
+    records.some(
+      (record) => record.monthlyCost === null || record.yearlyCost === null || record.currency === null,
+    )
+  ) {
+    return { monthlyCost: null, yearlyCost: null, currency: null };
+  }
+
+  const currency = records[0].currency;
+  if (!currency || records.some((record) => record.currency !== currency)) {
+    return { monthlyCost: null, yearlyCost: null, currency: null };
+  }
+
+  return {
+    monthlyCost: records.reduce((total, record) => total + (record.monthlyCost ?? 0), 0),
+    yearlyCost: records.reduce((total, record) => total + (record.yearlyCost ?? 0), 0),
+    currency,
+  };
+}
+
+function getDecisionCounts(records: SubscriptionRecord[]): Record<"KEEP" | "REVIEW" | "KILL", number> {
+  return records.reduce(
+    (counts, record) => {
+      counts[record.decision] += 1;
+      return counts;
+    },
+    { KEEP: 0, REVIEW: 0, KILL: 0 },
+  );
 }
 
 function SubscriptionRow({
