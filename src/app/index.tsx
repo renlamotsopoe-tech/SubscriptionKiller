@@ -1,10 +1,11 @@
+import { initializeRevenueCat } from "@/utils/revenuecat";
 import { detectSubscriptionCandidate } from "@/utils/subscription-detection";
 import {
   createSubscriptionRecords,
   type SubscriptionRecord,
 } from "@/utils/subscription-records";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -28,6 +29,10 @@ export default function HomeScreen() {
   >([]);
   const dashboardTotals = getDashboardTotals(subscriptionRecords);
   const decisionCounts = getDecisionCounts(subscriptionRecords);
+
+  useEffect(() => {
+    initializeRevenueCat();
+  }, []);
 
   const handleScan = async () => {
     try {
@@ -200,7 +205,9 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.subscriptionCount}>
-              <Text style={styles.countNumber}>{subscriptionRecords.length}</Text>
+              <Text style={styles.countNumber}>
+                {subscriptionRecords.length}
+              </Text>
               <Text style={styles.countLabel}>found</Text>
             </View>
           </View>
@@ -287,8 +294,8 @@ export default function HomeScreen() {
               : "Review your detected subscriptions"}
           </Text>
           <Text style={styles.tipText}>
-            Recommendations use email evidence only and should be reviewed before
-            taking action.
+            Recommendations use email evidence only and should be reviewed
+            before taking action.
           </Text>
 
           <Pressable
@@ -312,7 +319,9 @@ function formatCandidateAmount(
   currency: "INR" | "USD" | "EUR" | "GBP",
 ): string {
   const symbol = { INR: "₹", USD: "$", EUR: "€", GBP: "£" }[currency];
-  const formattedAmount = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+  const formattedAmount = Number.isInteger(amount)
+    ? String(amount)
+    : amount.toFixed(2);
   return `${symbol}${formattedAmount}`;
 }
 
@@ -345,7 +354,10 @@ function getDashboardTotals(records: SubscriptionRecord[]): {
   if (
     records.length === 0 ||
     records.some(
-      (record) => record.monthlyCost === null || record.yearlyCost === null || record.currency === null,
+      (record) =>
+        record.monthlyCost === null ||
+        record.yearlyCost === null ||
+        record.currency === null,
     )
   ) {
     return { monthlyCost: null, yearlyCost: null, currency: null };
@@ -357,13 +369,21 @@ function getDashboardTotals(records: SubscriptionRecord[]): {
   }
 
   return {
-    monthlyCost: records.reduce((total, record) => total + (record.monthlyCost ?? 0), 0),
-    yearlyCost: records.reduce((total, record) => total + (record.yearlyCost ?? 0), 0),
+    monthlyCost: records.reduce(
+      (total, record) => total + (record.monthlyCost ?? 0),
+      0,
+    ),
+    yearlyCost: records.reduce(
+      (total, record) => total + (record.yearlyCost ?? 0),
+      0,
+    ),
     currency,
   };
 }
 
-function getDecisionCounts(records: SubscriptionRecord[]): Record<"KEEP" | "REVIEW" | "KILL", number> {
+function getDecisionCounts(
+  records: SubscriptionRecord[],
+): Record<"KEEP" | "REVIEW" | "KILL", number> {
   return records.reduce(
     (counts, record) => {
       counts[record.decision] += 1;
